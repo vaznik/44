@@ -1,0 +1,193 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                String             @id @default(uuid())
+  tgUserId          BigInt             @unique
+  username          String?
+  firstName         String?
+  lastName          String?
+  photoUrl          String?
+  language          String             @default("en")
+  notifications     Boolean            @default(true)
+  isAdmin           Boolean            @default(false)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  accounts          Account[]
+  deviceLinks       DeviceLink[]
+  ledgerEntries     LedgerEntry[]
+  paymentIntents    PaymentIntent[]
+  createdRooms      Room[]             @relation("RoomCreator")
+  roundsWon         Round[]            @relation("RoundWinner")
+  roundParticipants RoundParticipant[]
+}
+
+model DeviceLink {
+  id         String   @id @default(uuid())
+  userId     String
+  deviceId   String
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([deviceId, userId])
+  @@index([deviceId])
+}
+
+model Account {
+  id        String        @id @default(uuid())
+  userId    String
+  currency  Currency
+  createdAt DateTime      @default(now())
+  user      User          @relation(fields: [userId], references: [id])
+  entries   LedgerEntry[]
+
+  @@unique([userId, currency])
+}
+
+model LedgerEntry {
+  id         String          @id @default(uuid())
+  accountId  String
+  type       LedgerEntryType
+  amountNano BigInt
+  refType    String
+  refId      String
+  createdAt  DateTime        @default(now())
+  userId     String
+  account    Account         @relation(fields: [accountId], references: [id])
+  user       User            @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([refType, refId])
+  @@index([accountId, createdAt])
+}
+
+model Room {
+  id                   String     @id @default(uuid())
+  kind                 RoomKind
+  status               RoomStatus @default(ACTIVE)
+  currency             Currency
+  title                String     @default("Room")
+  createdByUserId      String?
+  maxPlayers           Int?
+  minBetNano           BigInt     @default(0)
+  maxBetNano           BigInt?
+  maxTotalPotNano      BigInt?
+  roundDurationSeconds Int        @default(30)
+  startMode            StartMode  @default(TIMER)
+  feeBps               Int        @default(100)
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  createdBy            User?      @relation("RoomCreator", fields: [createdByUserId], references: [id])
+  rounds               Round[]
+
+  @@index([kind, currency, status])
+}
+
+model Round {
+  id             String             @id @default(uuid())
+  roomId         String
+  status         RoundStatus        @default(OPEN)
+  startedAt      DateTime           @default(now())
+  endsAt         DateTime
+  lockedAt       DateTime?
+  settledAt      DateTime?
+  cancelledAt    DateTime?
+  serverSeedHash String
+  serverSeed     String?
+  clientSeedAgg  String?
+  nonce          Int                @default(1)
+  digest         String?
+  winnerUserId   String?
+  totalPotNano   BigInt             @default(0)
+  feeNano        BigInt             @default(0)
+  payoutNano     BigInt             @default(0)
+  winningTicket  BigInt             @default(0)
+  totalWeight    BigInt             @default(0)
+  room           Room               @relation(fields: [roomId], references: [id])
+  winnerUser     User?              @relation("RoundWinner", fields: [winnerUserId], references: [id])
+  participants   RoundParticipant[]
+
+  @@index([roomId, status])
+  @@index([endsAt])
+}
+
+model RoundParticipant {
+  id         String   @id @default(uuid())
+  roundId    String
+  userId     String
+  clientSeed String
+  amountNano BigInt   @default(0)
+  betCount   Int      @default(1)
+  joinedAt   DateTime @default(now())
+  lastBetAt  DateTime @default(now())
+  round      Round    @relation(fields: [roundId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([roundId, userId])
+  @@index([roundId, amountNano])
+}
+
+model PaymentIntent {
+  id             String          @id @default(uuid())
+  userId         String
+  provider       PaymentProvider
+  currency       Currency
+  amountNano     BigInt
+  status         String          @default("PENDING")
+  idempotencyKey String          @unique
+  providerRef    String?         @unique
+  createdAt      DateTime        @default(now())
+  confirmedAt    DateTime?
+  user           User            @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+enum Currency {
+  XTR
+  TON
+}
+
+enum RoomKind {
+  GLOBAL
+  PRIVATE
+}
+
+enum RoomStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum StartMode {
+  TIMER
+  FILL
+}
+
+enum RoundStatus {
+  OPEN
+  LOCKED
+  SETTLED
+  CANCELLED
+  REFUNDED
+}
+
+enum LedgerEntryType {
+  DEPOSIT
+  WITHDRAW
+  BET_LOCK
+  PAYOUT
+  REFUND
+  HOUSE_FEE
+}
+
+enum PaymentProvider {
+  STARS
+  TON
+}
