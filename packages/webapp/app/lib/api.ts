@@ -4,14 +4,18 @@ import { initDataUnsafe } from './tg';
 
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL!;
 
-function getDeviceId(): string {
-  if (typeof window === 'undefined') return '';
-  const key = 'tg_device_id_v1';
+export function getOrCreateDeviceId(key = 'device_id'): string {
   let id = window.localStorage.getItem(key);
+
   if (!id) {
-    id = (window.crypto as any)?.randomUUID?.() ?? String(Date.now()) + '_' + Math.random().toString(16).slice(2);
-    window.localStorage.setItem(key, id);
+    const newId =
+      (window.crypto as any)?.randomUUID?.() ??
+      `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+    window.localStorage.setItem(key, newId);
+    id = newId;
   }
+
   return id;
 }
 
